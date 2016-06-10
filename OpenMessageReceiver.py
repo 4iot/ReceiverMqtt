@@ -29,18 +29,28 @@ def on_connect(client, userdata, rc):
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-	if ( msg.topic == "4iot/message" ):
+	topicElems = msg.topic.split('/')
+	#if ( msg.topic == "4iot/message" ):
+	if ( topicElems[1] == 'insert' ):
+		stmt = topicElems[1]
+		tabname = topicElems[2]
 		message = json.loads(msg.payload)
-		print "Topic: ", msg.topic+"\nMessage: "+ msg.payload
-		
-		# iotdb.messages.insert(message)
-		a = 1
-		# write in /Queue/filename
-      #filename = id + "-" + System.currentTimeMillis() + "-" + this.clientIp + '-' + request.getRemotePort() + ".himessage";
-		filename = msgQueueDir + '/' + message['id'] + '-' + str(int(round(time.time() * 1000))) + '-' + message['clientIp'] + '.himessage'
-		FH = open(filename,'w')
-		FH.write(json.dumps(message))
-		FH.close
+		print stmt+ " into " + tabname  +"\nContents: "+ msg.payload
+		if ( mongoConnect == True ):
+			# Build the query dynamically
+			statement = "iotdb." + tabname + "." + stmt + "(message)"
+			try:
+				eval(statement)
+			except pymongo.errors.OperationFailure as m2:
+				print ('Device ' +  'Could not insert iot message' )
+		else:
+			# write in /Queue/filename
+			#filename = id + "-" + System.currentTimeMillis() + "-" + this.clientIp + '-' + request.getRemotePort() + ".himessage";
+			filename = msgQueueDir + '/' + tabname + '-' + stmt + '-' + message['id'] + '-' + str(int(round(time.time() * 1000))) + '-' + message['clientIp'] + '.himessage'
+			FH = open(filename,'w')
+			FH.write(json.dumps(msg.payload))
+			FH.close
+
 	elif ( msg.topic == "4iot/please_register" ):
 		# register claim from new client
 		requester = str(msg.payload)
@@ -60,15 +70,53 @@ mqttBroker = Config.get('mqtt','broker',raw=False)
 mqttPort = Config.getint('mqtt','port')
 mqttKeepalive = Config.getint('mqtt','keepalive')
 
-mongoHostname = Config.get('mongodb','hostname',raw=False)
-mongoPort = Config.get('mongodb','port')
+try:
+    mongoHostname = Config.get('mongodb','hostname',raw=False)
+    mongoPort = Config.getint('mongodb','port')
+    mongoPort = int(mongoPort)
+    mongoConnect = True
+except:
+    mongoHostname = None
+    mongoPort = None
+    mongoDbname = None
+    mongoConnect = False
+    pass
+
+if ( mongoConnect == True ):
+    try:
+        mongoDbname = Config.get('mongodb','dbname')
+    except:
+        mongoDbname = 'iot_staging'
+        pass
 
 msgQueueDir = Config.get('misc','queue_dir',raw=False)
 
-# conn=pymongo.MongoClient('158.69.160.58',27017)
-# iotdb=conn.iot_staging
+if ( mongoConnect == True ):
+	connString = 'mongodb://' + mongoHostname + ':' + str(mongoPort) + '/'
+	try:
+		conn=pymongo.MongoClient(connString)
+		#conn=pymongo.MongoClient('158.69.160.58',27017)
+		openDb = 'conn.' + mongoDbname
+    		#iotdb=conn.iot_staging
+    		iotdb=openDb
+		#eval (openDb)
 
-client = mqtt.Client()
+	except pymongo.errors.OperationFailure as m1:
+		print ('Cannot connect to mongo instance on ' + mongoHostname )
+		mongoConnect = False
+
+	if ( mongoConnect == True ):
+		#connectString = 'iotdb=conn.' + mongoDbname
+		#connectString = 'iotdb=conn.iot_staging'
+		#try:
+			#eval(connectString)
+			#mongoConnect = True
+		#except pymongo.errors.OperationFailure as m2:
+			#print ('Cannot connect to mongo database ' + mongoDbname )
+			#mongoConnect = False
+		iotdb=conn.iot_staging
+
+client = mqtt.Client("4iotReceiver")
 client.on_connect = on_connect
 client.on_message = on_message
 
