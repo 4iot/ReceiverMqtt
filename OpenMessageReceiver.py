@@ -36,6 +36,7 @@ def on_message(client, userdata, msg):
 		tabname = topicElems[2]
 		message = json.loads(msg.payload)
 		print stmt+ " into " + tabname  +"\nContents: "+ msg.payload
+		filename = msgQueueDir + '/' + tabname + '-' + stmt + '-' + message['id'] + '-' + str(int(round(time.time() * 1000))) + '-' + message['clientIp'] + '.himessage'
 		if ( mongoConnect == True ):
 			# Build the query dynamically
 			statement = "iotdb." + tabname + "." + stmt + "(message)"
@@ -43,10 +44,12 @@ def on_message(client, userdata, msg):
 				eval(statement)
 			except pymongo.errors.OperationFailure as m2:
 				print ('Device ' +  'Could not insert iot message' )
+				FH = open(filename,'w')
+				FH.write(json.dumps(msg.payload))
+				FH.close
 		else:
 			# write in /Queue/filename
 			#filename = id + "-" + System.currentTimeMillis() + "-" + this.clientIp + '-' + request.getRemotePort() + ".himessage";
-			filename = msgQueueDir + '/' + tabname + '-' + stmt + '-' + message['id'] + '-' + str(int(round(time.time() * 1000))) + '-' + message['clientIp'] + '.himessage'
 			FH = open(filename,'w')
 			FH.write(json.dumps(msg.payload))
 			FH.close
